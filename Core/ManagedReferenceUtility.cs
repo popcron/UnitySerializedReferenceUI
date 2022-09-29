@@ -3,6 +3,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.Serialization;
 using UnityEditor;
 using UnityEngine;
 using Object = UnityEngine.Object;
@@ -12,8 +13,15 @@ public static class ManagedReferenceUtility
     /// Creates instance of passed type and assigns it to managed reference
     public static object AssignNewInstanceOfTypeToManagedReference(this SerializedProperty serializedProperty, Type type)
     {
-        var instance = Activator.CreateInstance(type);
+        var instance = FormatterServices.GetSafeUninitializedObject(type);
         
+        //call any default constructor
+        var defaultConstructor = type.GetConstructor(Type.EmptyTypes);
+        if (defaultConstructor is not null)
+        {
+            defaultConstructor.Invoke(instance, Array.Empty<object>());
+        }
+
         serializedProperty.serializedObject.Update(); 
         serializedProperty.managedReferenceValue = instance;
         serializedProperty.serializedObject.ApplyModifiedProperties(); 
@@ -53,9 +61,6 @@ public static class ManagedReferenceUtility
                 continue;
 			// Skip generic classes because they can not be instantiated
             if (type.ContainsGenericParameters)
-                continue;
-            // Skip types that has no public empty constructors (activator can not create them)    
-            if (type.IsClass && type.GetConstructor(Type.EmptyTypes) == null) // Structs still can be created (strangely)
                 continue;
             // Filter types by provided filters if there is ones
             if (filters != null && filters.All(f => f == null || f.Invoke(type)) == false) 
